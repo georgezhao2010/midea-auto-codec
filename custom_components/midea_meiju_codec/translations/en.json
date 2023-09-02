@@ -1,0 +1,37 @@
+{
+    "config": {
+        "error": {
+            "offline_error": "只能配置在线设备",
+            "download_lua_failed": "下载设备协议脚本失败",
+            "discover_failed": "无法在本地搜索到该设备",
+            "no_new_devices": "没有可用的设备",
+            "cant_get_token": "无法连接美的云获取设备关键信息(Token和Key)",
+            "config_incorrect": "配置信息不正确, 请检查后重新输入",
+            "connect_error": "无法连接到指定设备"
+        },
+        "step": {
+            "user": {
+                "data": {
+                    "username": "用户名（手机号）",
+                    "password": "密码"
+                },
+                "description": "登录并保存你的美居账号及密码",
+                "title": "登录"
+            },
+            "home": {
+                "description": "选择设备所在家庭",
+                "title": "家庭",
+                "data": {
+                    "home": "设备所在家庭"
+                }
+            },
+            "device": {
+                "description": "选择要添加的设备",
+                "title": "设备",
+                "data": {
+                    "device": "要添加的设备"
+                }
+            }
+        }
+    }
+}
