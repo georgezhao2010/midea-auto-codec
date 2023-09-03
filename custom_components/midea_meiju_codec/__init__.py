@@ -56,6 +56,8 @@ async def async_setup_entry(hass: HomeAssistant, config_entry):
     port = config_entry.data.get(CONF_PORT)
     model = config_entry.data.get(CONF_MODEL)
     protocol = config_entry.data.get(CONF_PROTOCOL)
+    sn = config_entry.data.get("sn")
+    sn8 = config_entry.data.get("sn8")
     lua_file = config_entry.data.get("lua_file")
     _LOGGER.error(f"lua_file = {lua_file}")
     if protocol == 3 and (key is None or key is None):
@@ -71,6 +73,8 @@ async def async_setup_entry(hass: HomeAssistant, config_entry):
         key=key,
         protocol=protocol,
         model=model,
+        sn=sn,
+        sn8=sn8,
         lua_file=lua_file,
     )
     if device:

@@ -39,7 +39,9 @@ class MiedaDevice(threading.Thread):
                  token: str | None,
                  key: str | None,
                  protocol: int,
-                 model: str,
+                 model: str | None,
+                 sn: str | None,
+                 sn8: str | None,
                  lua_file: str | None):
         threading.Thread.__init__(self)
         self._socket = None
@@ -59,7 +61,8 @@ class MiedaDevice(threading.Thread):
         self._is_run = False
         self._device_protocol_version = 0
         self._sub_type = None
-        self._sn = None
+        self._sn = sn
+        self._sn8 = sn8
         self._attributes = {}
         self._refresh_interval = 30
         self._heartbeat_interval = 10
@@ -82,6 +85,14 @@ class MiedaDevice(threading.Thread):
     @property
     def model(self):
         return self._model
+
+    @property
+    def sn(self):
+        return self._sn
+
+    @property
+    def sn8(self):
+        return self._sn8
 
     @property
     def attributes(self):

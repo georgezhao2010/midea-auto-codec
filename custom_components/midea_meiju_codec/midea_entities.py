@@ -9,7 +9,7 @@ class MideaEntity(Entity):
         self._entity_key = entity_key
         self._unique_id = f"{DOMAIN}.{self._device.device_id}_{entity_key}"
         self.entity_id = self._unique_id
-        self._device_name = self._device.name
+        self._device_name = self._device.device_name
 
     @property
     def device(self):
@@ -19,7 +19,7 @@ class MideaEntity(Entity):
     def device_info(self):
         return {
             "manufacturer": "Midea",
-            "model": self._device.model,
+            "model": f"{self._device.model} ({self._device.sn8})",
             "identifiers": {(DOMAIN, self._device.device_id)},
             "name": self._device_name
         }

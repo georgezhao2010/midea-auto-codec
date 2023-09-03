@@ -1,6 +1,9 @@
 {
     "config": {
         "error": {
+            "account_invalid": "登录美居失败，是否已修改过密码",
+            "invalid_input": "无效的输入，请输入有效IP地址或auto",
+            "login_failed": "无法登录到美居，请检查用户名或密码",
             "offline_error": "只能配置在线设备",
             "download_lua_failed": "下载设备协议脚本失败",
             "discover_failed": "无法在本地搜索到该设备",
@@ -19,17 +22,22 @@
                 "title": "登录"
             },
             "home": {
-                "description": "选择设备所在家庭",
                 "title": "家庭",
                 "data": {
-                    "home": "设备所在家庭"
+                    "home": "选择设备所在家庭"
                 }
             },
             "device": {
-                "description": "选择要添加的设备",
                 "title": "设备",
                 "data": {
-                    "device": "要添加的设备"
+                    "device": "选择要添加的设备"
+                }
+            },
+            "discover": {
+                "description": "获取设备信息，设备必须位于本地局域网内",
+                "title": "设备信息",
+                "data": {
+                    "ip_address": "设备地址(输入auto自动搜索设备)"
                 }
             }
         }

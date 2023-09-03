@@ -18,7 +18,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     device_id = config_entry.data.get(CONF_DEVICE_ID)
     device = hass.data[DOMAIN][DEVICES].get(device_id)
     binary_sensors = []
-    sensor = MideaDeviceStatusSensor(device, "online")
+    sensor = MideaDeviceStatusSensor(device, "status")
     binary_sensors.append(sensor)
     async_add_entities(binary_sensors)
 
@@ -31,6 +31,14 @@ class MideaDeviceStatusSensor(MideaEntity):
     @property
     def state(self):
         return STATE_ON if self._device.connected else STATE_OFF
+
+    @property
+    def name(self):
+        return f"{self._device_name} Status"
+
+    @property
+    def icon(self):
+        return "mdi:devices"
 
     @property
     def is_on(self):
@@ -46,8 +54,6 @@ class MideaDeviceStatusSensor(MideaEntity):
 
     def update_state(self, status):
         try:
-            _LOGGER.debug("=" * 50)
             self.schedule_update_ha_state()
-            _LOGGER.debug("-" * 50)
         except Exception as e:
             pass
