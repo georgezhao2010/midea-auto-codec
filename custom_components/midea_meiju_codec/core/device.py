@@ -61,14 +61,13 @@ class MiedaDevice(threading.Thread):
         self._is_run = False
         self._device_protocol_version = 0
         self._sub_type = None
-        self._sn = sn
         self._sn8 = sn8
         self._attributes = {}
         self._refresh_interval = 30
         self._heartbeat_interval = 10
         self._default_refresh_interval = 30
         self._connected = False
-        self._lua_runtime = MideaCodec(lua_file) if lua_file is not None else None
+        self._lua_runtime = MideaCodec(lua_file, sn=sn) if lua_file is not None else None
 
     @property
     def device_name(self):
