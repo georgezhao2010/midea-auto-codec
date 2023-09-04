@@ -37,7 +37,7 @@ class MideaCodec(LuaRuntime):
         if self._sn is not None:
             device_info["deviceSN"] = self._sn
         if self._sub_type is not None:
-            device_info["deviceSN"] = self._sub_type
+            device_info["deviceSubType"] = self._sub_type
         base_dict = {
             "deviceinfo": device_info
         }
