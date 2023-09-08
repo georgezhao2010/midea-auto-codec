@@ -1,5 +1,7 @@
 # Midea Meiju Codec
  
+ [![Stable](https://img.shields.io/github/v/release/georgezhao2010/midea-meiju-codec)](https://github.com/georgezhao2010/midea-meiju-codec/releases/latest)
+
 通过网络获取你美居家庭中的设备，并且在本地配置这些设备，并通过本地更新状态及控制设备。
 
 - 自动查找和发现设备
@@ -9,9 +11,15 @@
 
 ## 非常初期的预览版
 - 仅供技术实现验证以及评估
-- 目前无法控制设备，预计v0.0.3实现
+- 所有设备默认可生成一个名为Status的二进制传感器，其属性中列出了设备可访问的所有属性，当然有些值不可设置
+
+## 实体映射
+映射文件位于`device_map/device_mapping.py`, 目前支持映射的实体类型如下:
+- climate
+- switch
+- sensor
+- binary_sensor
 
 ## 安装与配置
+- 基于HomeAssistant Flow Config UI配置
 - 在初次配置的时候，由于要安装三方Python库lupa，所以可能会转一会，正常现象，等着就行。
-- 目前一个设备仅生成了一个二进制传感器Status, Status的属性中列出了设备可读的所有信息, 且会自动更新这些信息。
-- 如果要求不高，使用模板将属性映射成sensor或者binary_sensor，即可实时反映设备的工作状态。

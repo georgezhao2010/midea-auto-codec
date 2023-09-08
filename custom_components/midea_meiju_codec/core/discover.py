@@ -166,5 +166,7 @@ def enum_all_broadcast():
             if ip.is_IPv4 and ip.network_prefix < 32:
                 localNet = IPv4Network(f"{ip.ip}/{ip.network_prefix}", strict=False)
                 if localNet.is_private and not localNet.is_loopback and not localNet.is_link_local:
-                    nets.append(str(localNet.broadcast_address))
+                    addr = str(localNet.broadcast_address)
+                    if addr not in nets:
+                        nets.append(addr)
     return nets
