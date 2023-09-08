@@ -1,5 +1,6 @@
 DOMAIN = "midea_meiju_codec"
-STORAGE_PATH = f".storage/{DOMAIN}"
+STORAGE_PATH = f".storage/{DOMAIN}/lua"
+CONFIG_PATH = f".storage/{DOMAIN}/config"
 DEVICES = "DEVICES"
 CONF_ACCOUNT = "account"
 CONF_HOME = "home"

@@ -1,6 +1,11 @@
 import logging
 import os
 import base64
+from homeassistant.util.json import load_json
+try:
+    from homeassistant.helpers.json import save_json
+except ImportError:
+    from homeassistant.util.json import save_json
 from homeassistant.core import HomeAssistant
 from homeassistant.const import (
     Platform,
@@ -11,17 +16,51 @@ from homeassistant.const import (
     CONF_DEVICE_ID,
     CONF_PROTOCOL,
     CONF_TOKEN,
-    CONF_NAME
+    CONF_NAME,
+    CONF_DEVICE,
+    CONF_ENTITIES
 )
+from .device_map.device_mapping import DEVICE_MAPPING
 from .core.device import MiedaDevice
 from .const import (
     DOMAIN,
     DEVICES,
+    CONFIG_PATH,
     CONF_KEY,
     CONF_ACCOUNT,
 )
 
+ALL_PLATFORM = [
+    Platform.BINARY_SENSOR,
+    Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.CLIMATE,
+]
+
 _LOGGER = logging.getLogger(__name__)
+
+
+def load_device_config(hass, device_type, sn8):
+    os.makedirs(hass.config.path(CONFIG_PATH), exist_ok=True)
+    config_file = hass.config.path(f"{CONFIG_PATH}/{sn8}.json")
+    json_data = load_json(config_file, default={})
+    d_type = "0x%02X" % device_type
+    if len(json_data) >0:
+        json_data = json_data.get(sn8)
+    elif d_type in DEVICE_MAPPING:
+        if sn8 in DEVICE_MAPPING[d_type]:
+            json_data = DEVICE_MAPPING[d_type][sn8]
+            save_data = {sn8: json_data}
+            save_json(config_file, save_data)
+        elif "default" in DEVICE_MAPPING[d_type]:
+            json_data = DEVICE_MAPPING[d_type]["default"]
+            save_data = {sn8: json_data}
+            save_json(config_file, save_data)
+    return json_data
+
+
+async def update_listener(hass, config_entry):
+    pass
 
 
 async def async_setup(hass: HomeAssistant, hass_config: dict):
@@ -56,10 +95,10 @@ async def async_setup_entry(hass: HomeAssistant, config_entry):
     port = config_entry.data.get(CONF_PORT)
     model = config_entry.data.get(CONF_MODEL)
     protocol = config_entry.data.get(CONF_PROTOCOL)
+    subtype = config_entry.data.get("subtype")
     sn = config_entry.data.get("sn")
     sn8 = config_entry.data.get("sn8")
     lua_file = config_entry.data.get("lua_file")
-    _LOGGER.error(f"lua_file = {lua_file}")
     if protocol == 3 and (key is None or key is None):
         _LOGGER.error("For V3 devices, the key and the token is required.")
         return False
@@ -73,6 +112,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry):
         key=key,
         protocol=protocol,
         model=model,
+        subtype=subtype,
         sn=sn,
         sn8=sn8,
         lua_file=lua_file,
@@ -83,10 +123,38 @@ async def async_setup_entry(hass: HomeAssistant, config_entry):
             hass.data[DOMAIN] = {}
         if DEVICES not in hass.data[DOMAIN]:
             hass.data[DOMAIN][DEVICES] = {}
-        hass.data[DOMAIN][DEVICES][device_id] = device
-        for platform in [Platform.BINARY_SENSOR]:
+        hass.data[DOMAIN][DEVICES][device_id] = {}
+        hass.data[DOMAIN][DEVICES][device_id][CONF_DEVICE] = device
+        hass.data[DOMAIN][DEVICES][device_id][CONF_ENTITIES] = {}
+        config = load_device_config(hass, device_type, sn8)
+        if config is not None and len(config) > 0:
+            queries = config.get("queries")
+            if queries is not None and isinstance(queries, list):
+                device.queries = queries
+            centralized = config.get("centralized")
+            if centralized is not None and isinstance(centralized, list):
+                device.centralized = centralized
+            hass.data[DOMAIN][DEVICES][device_id]["manufacturer"] = config.get("manufacturer")
+            hass.data[DOMAIN][DEVICES][device_id][CONF_ENTITIES] = config.get(CONF_ENTITIES)
+        for platform in ALL_PLATFORM:
             hass.async_create_task(hass.config_entries.async_forward_entry_setup(
                 config_entry, platform))
-        #config_entry.add_update_listener(update_listener)
+        config_entry.add_update_listener(update_listener)
         return True
     return False
+
+
+async def async_unload_entry(hass: HomeAssistant, config_entry):
+    device_id = config_entry.data.get(CONF_DEVICE_ID)
+    lua_file = config_entry.data.get("lua_file")
+    os.remove(lua_file)
+    if device_id is not None:
+        device = hass.data[DOMAIN][DEVICES][device_id][CONF_DEVICE]
+        if device is not None:
+            config_file = hass.config.path(f"{CONFIG_PATH}/{device.sn8}.json")
+            os.remove(config_file)
+            device.close()
+        hass.data[DOMAIN][DEVICES].pop(device_id)
+    for platform in ALL_PLATFORM:
+        await hass.config_entries.async_forward_entry_unload(config_entry, platform)
+    return True

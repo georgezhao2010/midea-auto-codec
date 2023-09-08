@@ -1,17 +1,17 @@
-from aiohttp import ClientSession
-from secrets import token_hex, token_urlsafe
-from .security import CloudSecurity
-from threading import Lock
 import datetime
-import logging
 import time
 import json
-
-_LOGGER = logging.getLogger(__name__)
+import logging
+from aiohttp import ClientSession
+from secrets import token_hex, token_urlsafe
+from threading import Lock
+from .security import CloudSecurity
 
 CLIENT_TYPE = 1  # Android
 FORMAT = 2  # JSON
 APP_KEY = "4675636b"
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class MideaCloudBase:
@@ -76,7 +76,7 @@ class MideaCloudBase:
                     response = json.loads(raw)
                     break
             except Exception as e:
-                _LOGGER.debug(f"Cloud error: {repr(e)}")
+                _LOGGER.error(f"Cloud error: {repr(e)}")
         if int(response["code"]) == 0 and "data" in response:
             return response["data"]
         return None
@@ -127,7 +127,7 @@ class MideaCloudBase:
             udpid = CloudSecurity.get_udpid(device_id.to_bytes(6, "big"))
         else:
             udpid = CloudSecurity.get_udpid(device_id.to_bytes(6, "little"))
-        _LOGGER.debug(f"The udpid of deivce [{device_id}] generated "
+        _LOGGER.error(f"The udpid of deivce [{device_id}] generated "
                       f"with byte order '{'big' if byte_order_big else 'little'}': {udpid}")
         response = await self.api_request(
             "/v1/iot/secure/getToken",

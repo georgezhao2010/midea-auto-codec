@@ -1,9 +1,6 @@
 import lupa
-import logging
 import threading
 import json
-
-_LOGGER = logging.getLogger(__name__)
 
 
 class LuaRuntime:
@@ -27,17 +24,17 @@ class LuaRuntime:
 
 
 class MideaCodec(LuaRuntime):
-    def __init__(self, file, sn=None, sub_type=None):
+    def __init__(self, file, sn=None, subtype=None):
         super().__init__(file)
         self._sn = sn
-        self._sub_type = sub_type
+        self._subtype = subtype
 
     def _build_base_dict(self):
         device_info ={}
         if self._sn is not None:
             device_info["deviceSN"] = self._sn
-        if self._sub_type is not None:
-            device_info["deviceSubType"] = self._sub_type
+        if self._subtype is not None:
+            device_info["deviceSubType"] = self._subtype
         base_dict = {
             "deviceinfo": device_info
         }

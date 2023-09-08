@@ -1,14 +1,13 @@
-import logging
 import socket
 import ifaddr
 from ipaddress import IPv4Network
 from .security import LocalSecurity
+from .logger import MideaLogger
 try:
     import xml.etree.cElementTree as ET
 except ImportError:
     import xml.etree.ElementTree as ET
 
-_LOGGER = logging.getLogger(__name__)
 
 BROADCAST_MSG = bytearray([
     0x5a, 0x5a, 0x01, 0x11, 0x48, 0x00, 0x92, 0x00,
@@ -34,7 +33,7 @@ DEVICE_INFO_MSG = bytearray([
 
 
 def discover(discover_type=None, ip_address=None):
-    _LOGGER.debug(f"Begin discover, type: {discover_type}, ip_address: {ip_address}")
+    MideaLogger.debug(f"Begin discover, type: {discover_type}, ip_address: {ip_address}")
     if discover_type is None:
         discover_type = []
     security = LocalSecurity()
@@ -55,7 +54,7 @@ def discover(discover_type=None, ip_address=None):
         try:
             data, addr = sock.recvfrom(512)
             ip = addr[0]
-            _LOGGER.debug(f"Received broadcast from {addr}: {data.hex()}")
+            MideaLogger.debug(f"Received broadcast from {addr}: {data.hex()}")
             if len(data) >= 104 and (data[:2].hex() == "5a5a" or data[8:10].hex() == "5a5a"):
                 if data[:2].hex() == "5a5a":
                     protocol = 2
@@ -70,7 +69,7 @@ def discover(discover_type=None, ip_address=None):
                     continue
                 encrypt_data = data[40:-16]
                 reply = security.aes_decrypt(encrypt_data)
-                _LOGGER.debug(f"Declassified reply: {reply.hex()}")
+                MideaLogger.debug(f"Declassified reply: {reply.hex()}")
                 ssid = reply[41:41 + reply[40]].decode("utf-8")
                 device_type = ssid.split("_")[1]
                 port = bytes2port(reply[4:8])
@@ -105,13 +104,13 @@ def discover(discover_type=None, ip_address=None):
             }
             if len(discover_type) == 0 or device.get("type") in discover_type:
                 found_devices[device_id] = device
-                _LOGGER.debug(f"Found a supported device: {device}")
+                MideaLogger.debug(f"Found a supported device: {device}")
             else:
-                _LOGGER.debug(f"Found a unsupported device: {device}")
+                MideaLogger.debug(f"Found a unsupported device: {device}")
         except socket.timeout:
             break
         except socket.error as e:
-            _LOGGER.debug(f"Socket error: {repr(e)}")
+            MideaLogger.debug(f"Socket error: {repr(e)}")
     return found_devices
 
 
@@ -147,15 +146,15 @@ def get_device_info(device_ip, device_port: int):
             sock.settimeout(8)
             device_address = (device_ip, device_port)
             sock.connect(device_address)
-            _LOGGER.debug(f"Sending to {device_ip}:{device_port} {DEVICE_INFO_MSG.hex()}")
+            MideaLogger.debug(f"Sending to {device_ip}:{device_port} {DEVICE_INFO_MSG.hex()}")
             sock.sendall(DEVICE_INFO_MSG)
             response = sock.recv(512)
     except socket.timeout:
-        _LOGGER.warning(f"Connect the device {device_ip}:{device_port} timed out for 8s. "
+        MideaLogger.warning(f"Connect the device {device_ip}:{device_port} timed out for 8s. "
                         f"Don't care about a small amount of this. if many maybe not support."
                         )
     except socket.error:
-        _LOGGER.warning(f"Can't connect to Device {device_ip}:{device_port}")
+        MideaLogger.warning(f"Can't connect to Device {device_ip}:{device_port}")
     return response
 
 

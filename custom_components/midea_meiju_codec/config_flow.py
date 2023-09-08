@@ -129,6 +129,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "sn8": device.get("sn8"),
                     "sn": device.get("sn"),
                     "model": device.get("productModel"),
+                    "subtype": int(device.get("modelNumber")) if device.get("modelNumber") is not None else 0,
                     "enterprise_code": device.get("enterpriseCode"),
                     "online": device.get("onlineStatus") == "1"
                 }
@@ -181,6 +182,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                                 key=key,
                                 protocol=3,
                                 model=None,
+                                subtype = None,
                                 sn=None,
                                 sn8=None,
                                 lua_file=None
@@ -202,6 +204,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         key=None,
                         protocol=2,
                         model=None,
+                        subtype=None,
                         sn=None,
                         sn8=None,
                         lua_file=None
@@ -220,19 +223,20 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_PROTOCOL: current_device.get("protocol"),
                         CONF_IP_ADDRESS: current_device.get("ip_address"),
                         CONF_PORT: current_device.get("port"),
-                        CONF_MODEL: self._device.get("model"),
                         CONF_TOKEN: use_token,
                         CONF_KEY: use_key,
-                        "lua_file": file,
+                        CONF_MODEL: self._device.get("model"),
+                        "subtype": self._device.get("subtype"),
                         "sn": self._device.get("sn"),
                         "sn8": self._device.get("sn8"),
+                        "lua_file": file,
                     })
             else:
                 return await self.async_step_discover(error="invalid_input")
         return self.async_show_form(
             step_id="discover",
             data_schema=vol.Schema({
-                vol.Required(CONF_IP_ADDRESS): str
+                vol.Required(CONF_IP_ADDRESS, default="auto"): str
             }),
             errors={"base": error} if error else None
         )

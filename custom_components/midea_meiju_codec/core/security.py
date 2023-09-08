@@ -1,19 +1,17 @@
+import hmac
 import logging
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Util.strxor import strxor
 from Crypto.Random import get_random_bytes
 from hashlib import md5, sha256
-from urllib.parse import urlparse
-import hmac
-import urllib
-
-_LOGGER = logging.getLogger(__name__)
 
 MSGTYPE_HANDSHAKE_REQUEST = 0x0
 MSGTYPE_HANDSHAKE_RESPONSE = 0x1
 MSGTYPE_ENCRYPTED_RESPONSE = 0x3
 MSGTYPE_ENCRYPTED_REQUEST = 0x6
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class CloudSecurity:
