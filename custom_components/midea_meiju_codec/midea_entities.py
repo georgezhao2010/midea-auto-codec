@@ -13,20 +13,25 @@ class Rationale(IntEnum):
     GREATER = 1
     LESS = 2
 
+
 class MideaEntity(Entity):
-    def __init__(self, device, manufacturer: str | None, entity_key: str, config: dict):
+    def __init__(self, device, manufacturer: str | None, rationale: list | None, entity_key: str, config: dict):
         self._device = device
         self._device.register_update(self.update_state)
         self._entity_key = entity_key
         self._config = config
         self._device_name = self._device.device_name
-        self._attr_native_unit_of_measurement = self._config.get("unit")
+        self._rationale = rationale
+        rationale = config.get("rationale")
+        if rationale:
+            self._rationale = rationale
+        if self._rationale is None:
+            self._rationale = ["off", "on"]
+        self._attr_native_unit_of_measurement = self._config.get("unit_of_measurement")
         self._attr_device_class = self._config.get("device_class")
         self._attr_state_class = self._config.get("state_class")
-        self._attr_unit_of_measurement = self._config.get("unit")
         self._attr_icon = self._config.get("icon")
         self._attr_unique_id = f"{DOMAIN}.{self._device.device_id}_{self._entity_key}"
-        MideaLogger.debug(self._attr_unique_id)
         self._attr_device_info = {
             "manufacturer": "Midea" if manufacturer is None else manufacturer,
             "model": f"{self._device.model}",
@@ -44,15 +49,46 @@ class MideaEntity(Entity):
         return False
 
     @property
-    def state(self):
-        raise NotImplementedError
-
-    @property
     def available(self):
         return self._device.connected
 
-    def get_mode(self, key_of_modes, rationale: Rationale = Rationale.EQUALLY):
-        for mode, status in key_of_modes.items():
+    def _get_status_on_off(self, status_key: str):
+        result = False
+        status = self._device.get_attribute(status_key)
+        if status is not None:
+            try:
+                result = bool(self._rationale.index(status))
+            except ValueError:
+                MideaLogger.error(f"The value of attribute {status_key} ('{status}') "
+                                  f"is not in rationale {self._rationale}")
+        return result
+
+    def _set_status_on_off(self, status_key: str, turn_on: bool):
+        self._device.set_attribute(status_key, self._rationale[int(turn_on)])
+
+    def _list_get_selected(self, key_of_list: list, rationale: Rationale = Rationale.EQUALLY):
+        for index in range(0, len(key_of_list)):
+            match = True
+            for attr, value in key_of_list[index].items():
+                state_value = self._device.get_attribute(attr)
+                if state_value is None:
+                    match = False
+                    break
+                if rationale is Rationale.EQUALLY and state_value != value:
+                    match = False
+                    break
+                if rationale is Rationale.GREATER and state_value < value:
+                    match = False
+                    break
+                if rationale is Rationale.LESS and state_value > value:
+                    match = False
+                    break
+            if match:
+                return index
+        return None
+
+    def _dict_get_selected(self, key_of_dict: dict, rationale: Rationale = Rationale.EQUALLY):
+        for mode, status in key_of_dict.items():
             match = True
             for attr, value in status.items():
                 state_value = self._device.get_attribute(attr)
@@ -74,7 +110,6 @@ class MideaEntity(Entity):
 
     def update_state(self, status):
         if self._entity_key in status or "connected" in status:
-
             try:
                 self.schedule_update_ha_state()
             except Exception as e:
@@ -82,10 +117,6 @@ class MideaEntity(Entity):
 
 
 class MideaBinaryBaseEntity(MideaEntity):
-    def __init__(self, device, manufacturer: str | None, entity_key: str, config: dict):
-        super().__init__(device, manufacturer, entity_key, config)
-        binary_rationale = config.get("binary_rationale")
-        self._binary_rationale = binary_rationale if binary_rationale is not None else ["off", "on"]
 
     @property
     def state(self):
@@ -93,4 +124,4 @@ class MideaBinaryBaseEntity(MideaEntity):
 
     @property
     def is_on(self):
-        return self._device.get_attribute(self._entity_key) == self._binary_rationale[1]
+        return self._get_status_on_off(self._entity_key)

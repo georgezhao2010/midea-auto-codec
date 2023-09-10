@@ -1,7 +1,8 @@
 import lupa
 import threading
 import json
-
+from .logger import MideaLogger
+lupa.LuaMemoryError
 
 class LuaRuntime:
     def __init__(self, file):
@@ -44,22 +45,34 @@ class MideaCodec(LuaRuntime):
         query_dict = self._build_base_dict()
         query_dict["query"] = {} if append is None else append
         json_str = json.dumps(query_dict)
-        result = self.json_to_data(json_str)
-        return result
+        try:
+            result = self.json_to_data(json_str)
+            return result
+        except lupa.LuaError as e:
+            MideaLogger.error(f"LuaRuntimeError in build_query {json_str}: {repr(e)}")
+        return None
 
     def build_control(self, append=None):
         query_dict = self._build_base_dict()
         query_dict["control"] = {} if append is None else append
         json_str = json.dumps(query_dict)
-        result = self.json_to_data(json_str)
-        return result
+        try:
+            result = self.json_to_data(json_str)
+            return result
+        except lupa.LuaError as e:
+            MideaLogger.error(f"LuaRuntimeError in build_control {json_str}: {repr(e)}")
+            return None
 
     def build_status(self, append=None):
         query_dict = self._build_base_dict()
         query_dict["status"] = {} if append is None else append
         json_str = json.dumps(query_dict)
-        result = self.json_to_data(json_str)
-        return result
+        try:
+            result = self.json_to_data(json_str)
+            return result
+        except lupa.LuaError as e:
+            MideaLogger.error(f"LuaRuntimeError in build_status {json_str}: {repr(e)}")
+            return None
 
     def decode_status(self, data: str):
         data_dict = self._build_base_dict()
@@ -67,6 +80,11 @@ class MideaCodec(LuaRuntime):
             "data": data
         }
         json_str = json.dumps(data_dict)
-        result = self.data_to_json(json_str)
-        status = json.loads(result)
-        return status.get("status")
+        try:
+            result = self.data_to_json(json_str)
+            status = json.loads(result)
+            return status.get("status")
+        except lupa.LuaError as e:
+            MideaLogger.error(f"LuaRuntimeError in decode_status {data}: {repr(e)}")
+        return None
+

@@ -35,7 +35,7 @@ class MideaCloudBase:
         self.security = security
         self.server = server
 
-    async def api_request(self, endpoint, args=None, data=None):
+    async def api_request(self, endpoint, args=None, data=None) -> dict | None:
         args = args or {}
         headers = {}
         if data is None:
@@ -127,7 +127,7 @@ class MideaCloudBase:
             udpid = CloudSecurity.get_udpid(device_id.to_bytes(6, "big"))
         else:
             udpid = CloudSecurity.get_udpid(device_id.to_bytes(6, "little"))
-        _LOGGER.error(f"The udpid of deivce [{device_id}] generated "
+        _LOGGER.debug(f"The udpid of deivce [{device_id}] generated "
                       f"with byte order '{'big' if byte_order_big else 'little'}': {udpid}")
         response = await self.api_request(
             "/v1/iot/secure/getToken",
@@ -171,11 +171,12 @@ class MeijuCloudExtend(MideaCloudBase):
             response = await self.api_request("/v1/appliance/home/list/get", args={
                 'homegroupId': home
             })
-            for h in response.get("homeList") or []:
-                for r in h.get("roomList") or []:
-                    for a in r.get("applianceList"):
-                        a["sn"] = CloudSecurity.decrypt(bytes.fromhex(a["sn"]), self.key).decode()
-                        devices.append(a)
+            if response:
+                for h in response.get("homeList") or []:
+                    for r in h.get("roomList") or []:
+                        for a in r.get("applianceList"):
+                            a["sn"] = CloudSecurity.decrypt(bytes.fromhex(a["sn"]), self.key).decode()
+                            devices.append(a)
         return devices
 
     async def get_lua(self, sn, device_type, path, enterprise_code=None):
@@ -183,7 +184,7 @@ class MeijuCloudExtend(MideaCloudBase):
             "/v1/appliance/protocol/lua/luaGet",
             data={
                 "applianceSn": sn,
-                "applianceType": f"0x{'%02X' % device_type}",
+                "applianceType": "0x%02X" % device_type,
                 "applianceMFCode": enterprise_code if enterprise_code else "0000",
                 'version': "0",
                 "iotAppId": "900",

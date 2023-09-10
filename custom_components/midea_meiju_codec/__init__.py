@@ -1,11 +1,13 @@
-import logging
 import os
 import base64
+from importlib import import_module
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.util.json import load_json
 try:
     from homeassistant.helpers.json import save_json
 except ImportError:
     from homeassistant.util.json import save_json
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.core import HomeAssistant
 from homeassistant.const import (
     Platform,
@@ -20,7 +22,7 @@ from homeassistant.const import (
     CONF_DEVICE,
     CONF_ENTITIES
 )
-from .device_map.device_mapping import DEVICE_MAPPING
+from .core.logger import MideaLogger
 from .core.device import MiedaDevice
 from .const import (
     DOMAIN,
@@ -35,35 +37,56 @@ ALL_PLATFORM = [
     Platform.SENSOR,
     Platform.SWITCH,
     Platform.CLIMATE,
+    Platform.SELECT,
+    Platform.WATER_HEATER,
+    Platform.FAN
 ]
 
-_LOGGER = logging.getLogger(__name__)
+
+def get_sn8_used(hass: HomeAssistant, sn8):
+    entries = hass.config_entries.async_entries(DOMAIN)
+    count = 0
+    for entry in entries:
+        if sn8 == entry.data.get("sn8"):
+            count += 1
+    return count
 
 
-def load_device_config(hass, device_type, sn8):
+def remove_device_config(hass: HomeAssistant, sn8):
+    config_file = hass.config.path(f"{CONFIG_PATH}/{sn8}.json")
+    try:
+        os.remove(config_file)
+    except FileNotFoundError:
+        pass
+
+
+def load_device_config(hass: HomeAssistant, device_type, sn8):
     os.makedirs(hass.config.path(CONFIG_PATH), exist_ok=True)
     config_file = hass.config.path(f"{CONFIG_PATH}/{sn8}.json")
     json_data = load_json(config_file, default={})
-    d_type = "0x%02X" % device_type
-    if len(json_data) >0:
+    if len(json_data) > 0:
         json_data = json_data.get(sn8)
-    elif d_type in DEVICE_MAPPING:
-        if sn8 in DEVICE_MAPPING[d_type]:
-            json_data = DEVICE_MAPPING[d_type][sn8]
-            save_data = {sn8: json_data}
-            save_json(config_file, save_data)
-        elif "default" in DEVICE_MAPPING[d_type]:
-            json_data = DEVICE_MAPPING[d_type]["default"]
-            save_data = {sn8: json_data}
-            save_json(config_file, save_data)
+    else:
+        device_path = f".device_mapping.{'T0x%02X' % device_type}"
+        try:
+            mapping_module = import_module(device_path, __package__)
+            if sn8 in mapping_module.DEVICE_MAPPING.keys():
+                json_data = mapping_module.DEVICE_MAPPING[sn8]
+            elif "default" in mapping_module.DEVICE_MAPPING:
+                json_data = mapping_module.DEVICE_MAPPING["default"]
+            if len(json_data) > 0:
+                save_data = {sn8: json_data}
+                save_json(config_file, save_data)
+        except ModuleNotFoundError:
+            MideaLogger.warning(f"Can't load mapping file for type {'T0x%02X' % device_type}")
     return json_data
 
 
-async def update_listener(hass, config_entry):
+async def update_listener(hass: HomeAssistant, config_entry: ConfigEntry):
     pass
 
 
-async def async_setup(hass: HomeAssistant, hass_config: dict):
+async def async_setup(hass: HomeAssistant, config: ConfigType):
     hass.data.setdefault(DOMAIN, {})
     cjson = os.getcwd() + "/cjson.lua"
     bit = os.getcwd() + "/bit.lua"
@@ -80,7 +103,7 @@ async def async_setup(hass: HomeAssistant, hass_config: dict):
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, config_entry):
+async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry):
     device_type = config_entry.data.get(CONF_TYPE)
     if device_type == CONF_ACCOUNT:
         return True
@@ -100,7 +123,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry):
     sn8 = config_entry.data.get("sn8")
     lua_file = config_entry.data.get("lua_file")
     if protocol == 3 and (key is None or key is None):
-        _LOGGER.error("For V3 devices, the key and the token is required.")
+        MideaLogger.error("For V3 devices, the key and the token is required.")
         return False
     device = MiedaDevice(
         name=name,
@@ -144,15 +167,15 @@ async def async_setup_entry(hass: HomeAssistant, config_entry):
     return False
 
 
-async def async_unload_entry(hass: HomeAssistant, config_entry):
+async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry):
     device_id = config_entry.data.get(CONF_DEVICE_ID)
-    lua_file = config_entry.data.get("lua_file")
-    os.remove(lua_file)
     if device_id is not None:
         device = hass.data[DOMAIN][DEVICES][device_id][CONF_DEVICE]
         if device is not None:
-            config_file = hass.config.path(f"{CONFIG_PATH}/{device.sn8}.json")
-            os.remove(config_file)
+            if get_sn8_used(hass, device.sn8) == 1:
+                lua_file = config_entry.data.get("lua_file")
+                os.remove(lua_file)
+                remove_device_config(hass, device.sn8)
             device.close()
         hass.data[DOMAIN][DEVICES].pop(device_id)
     for platform in ALL_PLATFORM:

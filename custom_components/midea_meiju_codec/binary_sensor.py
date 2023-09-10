@@ -8,6 +8,7 @@ from homeassistant.const import (
     CONF_DEVICE,
     CONF_ENTITIES
 )
+
 from .const import (
     DOMAIN,
     DEVICES
@@ -19,11 +20,12 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     device_id = config_entry.data.get(CONF_DEVICE_ID)
     device = hass.data[DOMAIN][DEVICES][device_id].get(CONF_DEVICE)
     manufacturer = hass.data[DOMAIN][DEVICES][device_id].get("manufacturer")
+    rationale = hass.data[DOMAIN][DEVICES][device_id].get("rationale")
     entities = hass.data[DOMAIN][DEVICES][device_id].get(CONF_ENTITIES).get(Platform.BINARY_SENSOR)
-    devs = [MideaDeviceStatusSensorEntity(device, manufacturer,"Status", {})]
+    devs = [MideaDeviceStatusSensorEntity(device, manufacturer, rationale,"Status", {})]
     if entities is not None:
         for entity_key, config in entities.items():
-            devs.append(MideaBinarySensorEntity(device, manufacturer, entity_key, config))
+            devs.append(MideaBinarySensorEntity(device, manufacturer, rationale, entity_key, config))
     async_add_entities(devs)
 
 

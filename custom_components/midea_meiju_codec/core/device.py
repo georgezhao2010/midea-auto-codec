@@ -60,6 +60,7 @@ class MiedaDevice(threading.Thread):
         self._sn = sn
         self._sn8 = sn8
         self._attributes = {
+            "device_type": "T0x%02X" % device_type,
             "sn": sn,
             "sn8": sn8,
             "subtype": subtype
@@ -135,8 +136,8 @@ class MiedaDevice(threading.Thread):
             for attr in self._centralized:
                 new_status[attr] = self._attributes.get(attr)
             new_status[attribute] = value
-            set_cmd = self._lua_runtime.build_control(new_status)
-            self.build_send(set_cmd)
+            if set_cmd := self._lua_runtime.build_control(new_status):
+                self.build_send(set_cmd)
 
     def set_attributes(self, attributes):
         new_status = {}
@@ -148,8 +149,8 @@ class MiedaDevice(threading.Thread):
                 has_new = True
                 new_status[attribute] = value
         if has_new:
-            set_cmd = self._lua_runtime.build_control(new_status)
-            self.build_send(set_cmd)
+            if set_cmd := self._lua_runtime.build_control(new_status):
+                self.build_send(set_cmd)
 
     @staticmethod
     def fetch_v2_message(msg):
@@ -231,8 +232,8 @@ class MiedaDevice(threading.Thread):
 
     def refresh_status(self):
         for query in self._queries:
-            query_cmd = self._lua_runtime.build_query(query)
-            self.build_send(query_cmd)
+            if query_cmd := self._lua_runtime.build_query(query):
+                self.build_send(query_cmd)
 
     def parse_message(self, msg):
         if self._protocol == 3:
@@ -255,16 +256,16 @@ class MiedaDevice(threading.Thread):
                     decrypted = self._security.aes_decrypt(cryptographic)
                     MideaLogger.debug(f"Received: {decrypted.hex()}")
                     # 这就是最终消息
-                    status = self._lua_runtime.decode_status(decrypted.hex())
-                    MideaLogger.debug(f"Decoded: {status}")
-                    new_status = {}
-                    for single in status.keys():
-                        value = status.get(single)
-                        if single not in self._attributes or self._attributes[single] != value:
-                            self._attributes[single] = value
-                            new_status[single] = value
-                    if len(new_status) > 0:
-                        self.update_all(new_status)
+                    if status := self._lua_runtime.decode_status(decrypted.hex()):
+                        MideaLogger.debug(f"Decoded: {status}")
+                        new_status = {}
+                        for single in status.keys():
+                            value = status.get(single)
+                            if single not in self._attributes or self._attributes[single] != value:
+                                self._attributes[single] = value
+                                new_status[single] = value
+                        if len(new_status) > 0:
+                            self.update_all(new_status)
         return ParseMessageResult.SUCCESS
 
     def send_heartbeat(self):

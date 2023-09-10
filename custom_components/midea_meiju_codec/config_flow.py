@@ -122,15 +122,19 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         device_list = {}
         for device in devices:
             if not self._device_configured(int(device.get("applianceCode"))):
+                try:
+                    subtype = int(device.get("modelNumber")) if device.get("modelNumber") is not None else 0
+                except ValueError:
+                    subtype = 0
                 self._device_list[int(device.get("applianceCode"))] = {
                     "device_id": int(device.get("applianceCode")),
                     "name": device.get("name"),
                     "type": int(device.get("type"), 16),
-                    "sn8": device.get("sn8"),
+                    "sn8": device.get("sn8", "00000000"),
                     "sn": device.get("sn"),
-                    "model": device.get("productModel"),
-                    "subtype": int(device.get("modelNumber")) if device.get("modelNumber") is not None else 0,
-                    "enterprise_code": device.get("enterpriseCode"),
+                    "model": device.get("productModel", "0"),
+                    "subtype": subtype,
+                    "enterprise_code": device.get("enterpriseCode","0000"),
                     "online": device.get("onlineStatus") == "1"
                 }
                 device_list[int(device.get("applianceCode"))] = \

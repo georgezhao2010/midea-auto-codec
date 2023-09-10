@@ -1,22 +1,16 @@
-from homeassistant.components.climate import (
-    ClimateEntity,
-    ClimateEntityFeature,
-    HVACMode,
-    ATTR_HVAC_MODE,
-)
+from homeassistant.components.water_heater import WaterHeaterEntity, WaterHeaterEntityFeature
 from homeassistant.const import (
     Platform,
     CONF_DEVICE_ID,
-    CONF_ENTITIES,
     CONF_DEVICE,
+    CONF_ENTITIES,
     ATTR_TEMPERATURE
 )
-
 from .const import (
     DOMAIN,
     DEVICES
 )
-from .midea_entities import MideaEntity, Rationale
+from .midea_entities import MideaEntity
 
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
@@ -24,23 +18,19 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     device = hass.data[DOMAIN][DEVICES][device_id].get(CONF_DEVICE)
     manufacturer = hass.data[DOMAIN][DEVICES][device_id].get("manufacturer")
     rationale = hass.data[DOMAIN][DEVICES][device_id].get("rationale")
-    entities = hass.data[DOMAIN][DEVICES][device_id].get(CONF_ENTITIES).get(Platform.CLIMATE)
+    entities = hass.data[DOMAIN][DEVICES][device_id].get(CONF_ENTITIES).get(Platform.WATER_HEATER)
     devs = []
     if entities is not None:
         for entity_key, config in entities.items():
-            devs.append(MideaClimateEntity(device, manufacturer, rationale, entity_key, config))
+            devs.append(MideaWaterHeaterEntityEntity(device, manufacturer, rationale, entity_key, config))
     async_add_entities(devs)
 
 
-class MideaClimateEntity(MideaEntity, ClimateEntity):
+class MideaWaterHeaterEntityEntity(MideaEntity, WaterHeaterEntity):
     def __init__(self, device, manufacturer, rationale, entity_key, config):
         super().__init__(device, manufacturer, rationale, entity_key, config)
         self._key_power = self._config.get("power")
-        self._key_hvac_modes = self._config.get("hvac_modes")
-        self._key_preset_modes = self._config.get("preset_modes")
-        self._key_aux_heat = self._config.get("aux_heat")
-        self._key_swing_modes = self._config.get("swing_modes")
-        self._key_fan_modes = self._config.get("fan_modes")
+        self._key_operation_list = self._config.get("operation_list")
         self._key_min_temp = self._config.get("min_temp")
         self._key_max_temp = self._config.get("max_temp")
         self._key_current_temperature = self._config.get("current_temperature")
@@ -52,16 +42,18 @@ class MideaClimateEntity(MideaEntity, ClimateEntity):
     def supported_features(self):
         features = 0
         if self._key_target_temperature is not None:
-            features |= ClimateEntityFeature.TARGET_TEMPERATURE
-        if self._key_preset_modes is not None:
-            features |= ClimateEntityFeature.PRESET_MODE
-        if self._key_aux_heat is not None:
-            features |= ClimateEntityFeature.AUX_HEAT
-        if self._key_swing_modes is not None:
-            features |= ClimateEntityFeature.SWING_MODE
-        if self._key_fan_modes is not None:
-            features |= ClimateEntityFeature.FAN_MODE
+            features |= WaterHeaterEntityFeature.TARGET_TEMPERATURE
+        if self._key_operation_list is not None:
+            features |= WaterHeaterEntityFeature.OPERATION_MODE
         return features
+
+    @property
+    def operation_list(self):
+        return list(self._key_operation_list.keys())
+
+    @property
+    def current_operation(self):
+        return self._dict_get_selected(self._key_operation_list)
 
     @property
     def current_temperature(self):
@@ -101,44 +93,8 @@ class MideaClimateEntity(MideaEntity, ClimateEntity):
         return self.max_temp
 
     @property
-    def preset_modes(self):
-        return list(self._key_preset_modes.keys())
-
-    @property
-    def preset_mode(self):
-        return self._dict_get_selected(self._key_preset_modes)
-
-    @property
-    def fan_modes(self):
-        return list(self._key_fan_modes.keys())
-
-    @property
-    def fan_mode(self):
-        return self._dict_get_selected(self._key_fan_modes, Rationale.LESS)
-
-    @property
-    def swing_modes(self):
-        return list(self._key_swing_modes.keys())
-
-    @property
-    def swing_mode(self):
-        return self._dict_get_selected(self._key_swing_modes)
-
-    @property
     def is_on(self) -> bool:
-        return self.hvac_mode != HVACMode.OFF
-
-    @property
-    def hvac_mode(self):
-        return self._dict_get_selected(self._key_hvac_modes)
-
-    @property
-    def hvac_modes(self):
-        return list(self._key_hvac_modes.keys())
-
-    @property
-    def is_aux_heat(self):
-        return self._get_status_on_off(self._key_aux_heat)
+        return self._get_status_on_off(self._key_power)
 
     def turn_on(self):
         self._set_status_on_off(self._key_power, True)
@@ -152,11 +108,7 @@ class MideaClimateEntity(MideaEntity, ClimateEntity):
         temperature = kwargs.get(ATTR_TEMPERATURE)
         temp_int, temp_dec = divmod(temperature, 1)
         temp_int = int(temp_int)
-        hvac_mode = kwargs.get(ATTR_HVAC_MODE)
-        if hvac_mode is not None:
-            new_status = self._key_hvac_modes.get(hvac_mode)
-        else:
-            new_status = {}
+        new_status = {}
         if isinstance(self._key_target_temperature, list):
             new_status[self._key_target_temperature[0]] = temp_int
             new_status[self._key_target_temperature[1]] = temp_dec
@@ -164,30 +116,13 @@ class MideaClimateEntity(MideaEntity, ClimateEntity):
             new_status[self._key_target_temperature] = temperature
         self._device.set_attributes(new_status)
 
-    def set_fan_mode(self, fan_mode: str):
-        new_status = self._key_fan_modes.get(fan_mode)
+    def set_operation_mode(self, operation_mode: str) -> None:
+        new_status = self._key_operation_list.get(operation_mode)
         self._device.set_attributes(new_status)
-
-    def set_preset_mode(self, preset_mode: str):
-        new_status = self._key_preset_modes.get(preset_mode)
-        self._device.set_attributes(new_status)
-
-    def set_hvac_mode(self, hvac_mode: str):
-        new_status = self._key_hvac_modes.get(hvac_mode)
-        self._device.set_attributes(new_status)
-
-    def set_swing_mode(self, swing_mode: str):
-        new_status = self._key_swing_modes.get(swing_mode)
-        self._device.set_attributes(new_status)
-
-    def turn_aux_heat_on(self) -> None:
-        self._set_status_on_off(self._key_aux_heat, True)
-
-    def turn_aux_heat_off(self) -> None:
-        self._set_status_on_off(self._key_aux_heat, False)
 
     def update_state(self, status):
         try:
             self.schedule_update_ha_state()
         except Exception as e:
             pass
+
