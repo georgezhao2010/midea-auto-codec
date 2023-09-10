@@ -24,6 +24,9 @@
 - fan
 - water_heater
 
+示例配置`22012227`演示了如何将设备属性映射成以上各种HomeAssistant中的实体。
+
+
 ## 安装与配置
 - 基于HomeAssistant Flow Config UI配置
 - 在初次配置的时候，由于要安装三方Python库lupa，所以可能会转一会，正常现象，等着就行。
