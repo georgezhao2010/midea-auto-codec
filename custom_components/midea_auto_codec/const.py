@@ -1,4 +1,4 @@
-DOMAIN = "midea_meiju_codec"
+DOMAIN = "midea_auto_codec"
 STORAGE_PATH = f".storage/{DOMAIN}/lua"
 CONFIG_PATH = f".storage/{DOMAIN}/config"
 DEVICES = "DEVICES"
