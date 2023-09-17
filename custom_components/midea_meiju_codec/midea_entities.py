@@ -22,9 +22,8 @@ class MideaEntity(Entity):
         self._config = config
         self._device_name = self._device.device_name
         self._rationale = rationale
-        rationale = config.get("rationale")
-        if rationale:
-            self._rationale = rationale
+        if rationale_local := config.get("rationale"):
+            self._rationale = rationale_local
         if self._rationale is None:
             self._rationale = ["off", "on"]
         self._attr_native_unit_of_measurement = self._config.get("unit_of_measurement")
@@ -43,6 +42,10 @@ class MideaEntity(Entity):
             name = self._entity_key.replace("_", " ").title()
         self._attr_name = f"{self._device_name} {name}"
         self.entity_id = self._attr_unique_id
+
+    @property
+    def device(self):
+        return self._device
 
     @property
     def should_poll(self):

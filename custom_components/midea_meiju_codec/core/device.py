@@ -5,6 +5,7 @@ from enum import IntEnum
 from .security import LocalSecurity, MSGTYPE_HANDSHAKE_REQUEST, MSGTYPE_ENCRYPTED_REQUEST
 from .packet_builder import PacketBuilder
 from .lua_runtime import MideaCodec
+from .message import MessageQuestCustom
 from .logger import MideaLogger
 
 
@@ -70,6 +71,8 @@ class MiedaDevice(threading.Thread):
         self._connected = False
         self._queries = [{}]
         self._centralized = []
+        self._calculate_get = []
+        self._calculate_set = []
         self._lua_runtime = MideaCodec(lua_file, sn=sn, subtype=subtype) if lua_file is not None else None
 
     @property
@@ -111,21 +114,17 @@ class MiedaDevice(threading.Thread):
     def set_refresh_interval(self, refresh_interval):
         self._refresh_interval = refresh_interval
 
-    @property
-    def queries(self):
-        return self._queries
-
-    @queries.setter
-    def queries(self, queries: list):
+    def set_queries(self, queries: list):
         self._queries = queries
 
-    @property
-    def centralized(self):
-        return self._centralized
-
-    @centralized.setter
-    def centralized(self, centralized: list):
+    def set_centralized(self, centralized: list):
         self._centralized = centralized
+
+    def set_calculate(self, calculate: dict):
+        values_get = calculate.get("get")
+        values_set = calculate.get("set")
+        self._calculate_get = values_get if values_get else []
+        self._calculate_set = values_set if values_set else []
 
     def get_attribute(self, attribute):
         return self._attributes.get(attribute)
@@ -137,7 +136,7 @@ class MiedaDevice(threading.Thread):
                 new_status[attr] = self._attributes.get(attr)
             new_status[attribute] = value
             if set_cmd := self._lua_runtime.build_control(new_status):
-                self.build_send(set_cmd)
+                self._build_send(set_cmd)
 
     def set_attributes(self, attributes):
         new_status = {}
@@ -150,22 +149,26 @@ class MiedaDevice(threading.Thread):
                 new_status[attribute] = value
         if has_new:
             if set_cmd := self._lua_runtime.build_control(new_status):
-                self.build_send(set_cmd)
+                self._build_send(set_cmd)
 
-    @staticmethod
-    def fetch_v2_message(msg):
-        result = []
-        while len(msg) > 0:
-            factual_msg_len = len(msg)
-            if factual_msg_len < 6:
-                break
-            alleged_msg_len = msg[4] + (msg[5] << 8)
-            if factual_msg_len >= alleged_msg_len:
-                result.append(msg[:alleged_msg_len])
-                msg = msg[alleged_msg_len:]
-            else:
-                break
-        return result, msg
+    def set_ip_address(self, ip_address):
+        MideaLogger.debug(f"Update IP address to {ip_address}")
+        self._ip_address = ip_address
+        self.close_socket()
+
+    def send_command(self, cmd_type, cmd_body: bytearray):
+        cmd = MessageQuestCustom(self._device_type, cmd_type, cmd_body)
+        try:
+            self._build_send(cmd.serialize().hex())
+        except socket.error as e:
+            MideaLogger.debug(
+                f"Interface send_command failure, {repr(e)}, "
+                f"cmd_type: {cmd_type}, cmd_body: {cmd_body.hex()}",
+                self._device_id
+            )
+
+    def register_update(self, update):
+        self._updates.append(update)
 
     def connect(self, refresh=False):
         try:
@@ -175,11 +178,11 @@ class MiedaDevice(threading.Thread):
             self._socket.connect((self._ip_address, self._port))
             MideaLogger.debug(f"Connected", self._device_id)
             if self._protocol == 3:
-                self.authenticate()
+                self._authenticate()
             MideaLogger.debug(f"Authentication success", self._device_id)
-            self.device_connected(True)
+            self._device_connected(True)
             if refresh:
-                self.refresh_status()
+                self._refresh_status()
             return True
         except socket.timeout:
             MideaLogger.debug(f"Connection timed out", self._device_id)
@@ -194,10 +197,34 @@ class MiedaDevice(threading.Thread):
         except Exception as e:
             MideaLogger.error(f"Unknown error: {e.__traceback__.tb_frame.f_globals['__file__']}, "
                               f"{e.__traceback__.tb_lineno}, {repr(e)}")
-        self.device_connected(False)
+        if refresh:
+            self._device_connected(False)
+        self._socket = None
         return False
 
-    def authenticate(self):
+    
+    def disconnect(self):
+        self._buffer = b""
+        if self._socket:
+            self._socket.close()
+            self._socket = None
+
+    @staticmethod
+    def _fetch_v2_message(msg):
+        result = []
+        while len(msg) > 0:
+            factual_msg_len = len(msg)
+            if factual_msg_len < 6:
+                break
+            alleged_msg_len = msg[4] + (msg[5] << 8)
+            if factual_msg_len >= alleged_msg_len:
+                result.append(msg[:alleged_msg_len])
+                msg = msg[alleged_msg_len:]
+            else:
+                break
+        return result, msg
+
+    def _authenticate(self):
         request = self._security.encode_8370(
             self._token, MSGTYPE_HANDSHAKE_REQUEST)
         MideaLogger.debug(f"Handshaking")
@@ -208,34 +235,34 @@ class MiedaDevice(threading.Thread):
         response = response[8: 72]
         self._security.tcp_key(response, self._key)
 
-    def send_message(self, data):
+    def _send_message(self, data):
         if self._protocol == 3:
-            self.send_message_v3(data, msg_type=MSGTYPE_ENCRYPTED_REQUEST)
+            self._send_message_v3(data, msg_type=MSGTYPE_ENCRYPTED_REQUEST)
         else:
-            self.send_message_v2(data)
+            self._send_message_v2(data)
 
-    def send_message_v2(self, data):
+    def _send_message_v2(self, data):
         if self._socket is not None:
             self._socket.send(data)
         else:
-            MideaLogger.debug(f"Send failure, device disconnected, data: {data.hex()}")
+            MideaLogger.debug(f"Command send failure, device disconnected, data: {data.hex()}")
 
-    def send_message_v3(self, data, msg_type=MSGTYPE_ENCRYPTED_REQUEST):
+    def _send_message_v3(self, data, msg_type=MSGTYPE_ENCRYPTED_REQUEST):
         data = self._security.encode_8370(data, msg_type)
-        self.send_message_v2(data)
+        self._send_message_v2(data)
 
-    def build_send(self, cmd):
-        MideaLogger.debug(f"Sending: {cmd}")
+    def _build_send(self, cmd: str):
+        MideaLogger.debug(f"Sending: {cmd.lower()}")
         bytes_cmd = bytes.fromhex(cmd)
         msg = PacketBuilder(self._device_id, bytes_cmd).finalize()
-        self.send_message(msg)
+        self._send_message(msg)
 
-    def refresh_status(self):
+    def _refresh_status(self):
         for query in self._queries:
             if query_cmd := self._lua_runtime.build_query(query):
-                self.build_send(query_cmd)
+                self._build_send(query_cmd)
 
-    def parse_message(self, msg):
+    def _parse_message(self, msg):
         if self._protocol == 3:
             messages, self._buffer = self._security.decode_8370(self._buffer + msg)
         else:
@@ -254,8 +281,7 @@ class MiedaDevice(threading.Thread):
                 cryptographic = message[40:-16]
                 if payload_len % 16 == 0:
                     decrypted = self._security.aes_decrypt(cryptographic)
-                    MideaLogger.debug(f"Received: {decrypted.hex()}")
-                    # 这就是最终消息
+                    MideaLogger.debug(f"Received: {decrypted.hex().lower()}")
                     if status := self._lua_runtime.decode_status(decrypted.hex()):
                         MideaLogger.debug(f"Decoded: {status}")
                         new_status = {}
@@ -265,22 +291,44 @@ class MiedaDevice(threading.Thread):
                                 self._attributes[single] = value
                                 new_status[single] = value
                         if len(new_status) > 0:
-                            self.update_all(new_status)
+                            for c in self._calculate_get:
+                                lvalue = c.get("lvalue")
+                                rvalue = c.get("rvalue")
+                                if lvalue and rvalue:
+                                    calculate = False
+                                    for s, v in new_status.items():
+                                        if rvalue.find(f"[{s}]") >= 0:
+                                            calculate = True
+                                            break
+                                    if calculate:
+                                        calculate_str1 = \
+                                            (f"{lvalue.replace('[', 'self._attributes[')} = "
+                                             f"{rvalue.replace('[', 'self._attributes[')}") \
+                                            .replace("[","[\"").replace("]","\"]")
+                                        calculate_str2 = \
+                                            (f"{lvalue.replace('[', 'new_status[')} = "
+                                             f"{rvalue.replace('[', 'self._attributes[')}") \
+                                            .replace("[","[\"").replace("]","\"]")
+                                        try:
+                                            exec(calculate_str1)
+                                            exec(calculate_str2)
+                                        except Exception:
+                                            MideaLogger.warning(
+                                                f"Calculation Error: {lvalue} = {rvalue}", self._device_id
+                                            )
+                            self._update_all(new_status)
         return ParseMessageResult.SUCCESS
 
-    def send_heartbeat(self):
+    def _send_heartbeat(self):
         msg = PacketBuilder(self._device_id, bytearray([0x00])).finalize(msg_type=0)
-        self.send_message(msg)
+        self._send_message(msg)
 
-    def device_connected(self, connected=True):
+    def _device_connected(self, connected=True):
         self._connected = connected
         status = {"connected": connected}
-        self.update_all(status)
+        self._update_all(status)
 
-    def register_update(self, update):
-        self._updates.append(update)
-
-    def update_all(self, status):
+    def _update_all(self, status):
         MideaLogger.debug(f"Status update: {status}")
         for update in self._updates:
             update(status)
@@ -294,18 +342,7 @@ class MiedaDevice(threading.Thread):
         if self._is_run:
             self._is_run = False
             self._lua_runtime = None
-            self.close_socket()
-
-    def close_socket(self):
-        self._buffer = b""
-        if self._socket:
-            self._socket.close()
-            self._socket = None
-
-    def set_ip_address(self, ip_address):
-        MideaLogger.debug(f"Update IP address to {ip_address}")
-        self._ip_address = ip_address
-        self.close_socket()
+            self.disconnect()
 
     def run(self):
         while self._is_run:
@@ -313,7 +350,7 @@ class MiedaDevice(threading.Thread):
                 if self.connect(refresh=True) is False:
                     if not self._is_run:
                         return
-                    self.close_socket()
+                    self.disconnect()
                     time.sleep(5)
             timeout_counter = 0
             start = time.time()
@@ -323,20 +360,20 @@ class MiedaDevice(threading.Thread):
             while True:
                 try:
                     now = time.time()
-                    if now - previous_refresh >= self._refresh_interval:
-                        self.refresh_status()
+                    if 0 < self._refresh_interval <= now - previous_refresh:
+                        self._refresh_status()
                         previous_refresh = now
                     if now - previous_heartbeat >= self._heartbeat_interval:
-                        self.send_heartbeat()
+                        self._send_heartbeat()
                         previous_heartbeat = now
                     msg = self._socket.recv(512)
                     msg_len = len(msg)
                     if msg_len == 0:
                         raise socket.error("Connection closed by peer")
-                    result = self.parse_message(msg)
+                    result = self._parse_message(msg)
                     if result == ParseMessageResult.ERROR:
                         MideaLogger.debug(f"Message 'ERROR' received")
-                        self.close_socket()
+                        self.disconnect()
                         break
                     elif result == ParseMessageResult.SUCCESS:
                         timeout_counter = 0
@@ -344,16 +381,16 @@ class MiedaDevice(threading.Thread):
                     timeout_counter = timeout_counter + 1
                     if timeout_counter >= 120:
                         MideaLogger.debug(f"Heartbeat timed out")
-                        self.close_socket()
+                        self.disconnect()
                         break
                 except socket.error as e:
                     MideaLogger.debug(f"Socket error {repr(e)}")
-                    self.close_socket()
+                    self.disconnect()
                     break
                 except Exception as e:
                     MideaLogger.error(f"Unknown error :{e.__traceback__.tb_frame.f_globals['__file__']}, "
                                       f"{e.__traceback__.tb_lineno}, {repr(e)}")
-                    self.close_socket()
+                    self.disconnect()
                     break
 
 

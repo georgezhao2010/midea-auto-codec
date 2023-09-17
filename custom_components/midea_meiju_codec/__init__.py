@@ -1,5 +1,6 @@
 import os
 import base64
+import voluptuous as vol
 from importlib import import_module
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.util.json import load_json
@@ -8,7 +9,10 @@ try:
 except ImportError:
     from homeassistant.util.json import save_json
 from homeassistant.helpers.typing import ConfigType
-from homeassistant.core import HomeAssistant
+from homeassistant.core import (
+    HomeAssistant, 
+    ServiceCall
+)
 from homeassistant.const import (
     Platform,
     CONF_TYPE,
@@ -27,9 +31,14 @@ from .core.device import MiedaDevice
 from .const import (
     DOMAIN,
     DEVICES,
+    CONF_REFRESH_INTERVAL,
     CONFIG_PATH,
     CONF_KEY,
     CONF_ACCOUNT,
+    CONF_SN8,
+    CONF_SN,
+    CONF_MODEL_NUMBER,
+    CONF_LUA_FILE
 )
 
 ALL_PLATFORM = [
@@ -82,8 +91,71 @@ def load_device_config(hass: HomeAssistant, device_type, sn8):
     return json_data
 
 
+def register_services(hass: HomeAssistant):
+
+    async def async_set_attributes(service: ServiceCall):
+        device_id = service.data.get("device_id")
+        attributes = service.data.get("attributes")
+        MideaLogger.debug(f"Service called: set_attributes, device_id: {device_id}, attributes: {attributes}")
+        try:
+            device: MiedaDevice = hass.data[DOMAIN][DEVICES][device_id].get(CONF_DEVICE)
+        except KeyError:
+            MideaLogger.error(f"Failed to call service set_attributes: the device {device_id} isn't exist.")
+            return
+        if device:
+            device.set_attributes(attributes)
+
+    async def async_send_command(service: ServiceCall):
+        device_id = service.data.get("device_id")
+        cmd_type = service.data.get("cmd_type")
+        cmd_body = service.data.get("cmd_body")
+        try:
+            cmd_body = bytearray.fromhex(cmd_body)
+        except ValueError:
+            MideaLogger.error(f"Failed to call service set_attributes: invalid cmd_body, a hexadecimal string required")
+            return
+        try:
+            device: MiedaDevice = hass.data[DOMAIN][DEVICES][device_id].get(CONF_DEVICE)
+        except KeyError:
+            MideaLogger.error(f"Failed to call service set_attributes: the device {device_id} isn't exist.")
+            return
+        if device:
+            device.send_command(cmd_type, cmd_body)
+
+    hass.services.async_register(
+        DOMAIN, 
+        "set_attributes", 
+        async_set_attributes,
+        schema=vol.Schema({ 
+            vol.Required("device_id"): vol.Coerce(int),
+            vol.Required("attributes"): vol.Any(dict)
+        })
+    )
+    hass.services.async_register(
+        DOMAIN, "send_command", async_send_command,
+        schema=vol.Schema({
+            vol.Required("device_id"): vol.Coerce(int),
+            vol.Required("cmd_type"): vol.In([2, 3]),
+            vol.Required("cmd_body"): str
+        })
+    )
+
+
 async def update_listener(hass: HomeAssistant, config_entry: ConfigEntry):
-    pass
+    device_id = config_entry.data.get(CONF_DEVICE_ID)
+    if device_id is not None:
+        ip_address = config_entry.options.get(
+            CONF_IP_ADDRESS, None
+        )
+        refresh_interval = config_entry.options.get(
+            CONF_REFRESH_INTERVAL, None
+        )
+        device: MiedaDevice = hass.data[DOMAIN][DEVICES][device_id][CONF_DEVICE]
+        if device:
+            if ip_address is not None:
+                device.set_ip_address(ip_address)
+            if refresh_interval is not None:
+                device.set_refresh_interval(refresh_interval)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType):
@@ -100,6 +172,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType):
         bit_lua = base64.b64decode(BIT_LUA.encode("utf-8")).decode("utf-8")
         with open(bit, "wt") as fp:
             fp.write(bit_lua)
+
+    register_services(hass)
     return True
 
 
@@ -115,13 +189,14 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry):
     ip_address = config_entry.options.get(CONF_IP_ADDRESS, None)
     if not ip_address:
         ip_address = config_entry.data.get(CONF_IP_ADDRESS)
+    refresh_interval = config_entry.options.get(CONF_REFRESH_INTERVAL)
     port = config_entry.data.get(CONF_PORT)
     model = config_entry.data.get(CONF_MODEL)
     protocol = config_entry.data.get(CONF_PROTOCOL)
-    subtype = config_entry.data.get("subtype")
-    sn = config_entry.data.get("sn")
-    sn8 = config_entry.data.get("sn8")
-    lua_file = config_entry.data.get("lua_file")
+    subtype = config_entry.data.get(CONF_MODEL_NUMBER)
+    sn = config_entry.data.get(CONF_SN)
+    sn8 = config_entry.data.get(CONF_SN8)
+    lua_file = config_entry.data.get(CONF_LUA_FILE)
     if protocol == 3 and (key is None or key is None):
         MideaLogger.error("For V3 devices, the key and the token is required.")
         return False
@@ -140,37 +215,41 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry):
         sn8=sn8,
         lua_file=lua_file,
     )
-    if device:
-        device.open()
-        if DOMAIN not in hass.data:
-            hass.data[DOMAIN] = {}
-        if DEVICES not in hass.data[DOMAIN]:
-            hass.data[DOMAIN][DEVICES] = {}
-        hass.data[DOMAIN][DEVICES][device_id] = {}
-        hass.data[DOMAIN][DEVICES][device_id][CONF_DEVICE] = device
-        hass.data[DOMAIN][DEVICES][device_id][CONF_ENTITIES] = {}
-        config = load_device_config(hass, device_type, sn8)
-        if config is not None and len(config) > 0:
-            queries = config.get("queries")
-            if queries is not None and isinstance(queries, list):
-                device.queries = queries
-            centralized = config.get("centralized")
-            if centralized is not None and isinstance(centralized, list):
-                device.centralized = centralized
-            hass.data[DOMAIN][DEVICES][device_id]["manufacturer"] = config.get("manufacturer")
-            hass.data[DOMAIN][DEVICES][device_id][CONF_ENTITIES] = config.get(CONF_ENTITIES)
-        for platform in ALL_PLATFORM:
-            hass.async_create_task(hass.config_entries.async_forward_entry_setup(
-                config_entry, platform))
-        config_entry.add_update_listener(update_listener)
-        return True
-    return False
+    if refresh_interval is not None:
+        device.set_refresh_interval(refresh_interval)
+    device.open()
+    if DOMAIN not in hass.data:
+        hass.data[DOMAIN] = {}
+    if DEVICES not in hass.data[DOMAIN]:
+        hass.data[DOMAIN][DEVICES] = {}
+    hass.data[DOMAIN][DEVICES][device_id] = {}
+    hass.data[DOMAIN][DEVICES][device_id][CONF_DEVICE] = device
+    hass.data[DOMAIN][DEVICES][device_id][CONF_ENTITIES] = {}
+    config = load_device_config(hass, device_type, sn8)
+    if config is not None and len(config) > 0:
+        queries = config.get("queries")
+        if queries is not None and isinstance(queries, list):
+            device.set_queries(queries)
+        centralized = config.get("centralized")
+        if centralized is not None and isinstance(centralized, list):
+            device.set_centralized(centralized)
+        calculate = config.get("calculate")
+        if calculate is not None and isinstance(calculate, dict):
+            device.set_calculate(calculate)
+        hass.data[DOMAIN][DEVICES][device_id]["manufacturer"] = config.get("manufacturer")
+        hass.data[DOMAIN][DEVICES][device_id]["rationale"] = config.get("rationale")
+        hass.data[DOMAIN][DEVICES][device_id][CONF_ENTITIES] = config.get(CONF_ENTITIES)
+    for platform in ALL_PLATFORM:
+        hass.async_create_task(hass.config_entries.async_forward_entry_setup(
+            config_entry, platform))
+    config_entry.add_update_listener(update_listener)
+    return True
 
 
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry):
     device_id = config_entry.data.get(CONF_DEVICE_ID)
     if device_id is not None:
-        device = hass.data[DOMAIN][DEVICES][device_id][CONF_DEVICE]
+        device: MiedaDevice = hass.data[DOMAIN][DEVICES][device_id][CONF_DEVICE]
         if device is not None:
             if get_sn8_used(hass, device.sn8) == 1:
                 lua_file = config_entry.data.get("lua_file")

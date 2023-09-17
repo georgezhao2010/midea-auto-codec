@@ -107,6 +107,8 @@ def discover(discover_type=None, ip_address=None):
                 MideaLogger.debug(f"Found a supported device: {device}")
             else:
                 MideaLogger.debug(f"Found a unsupported device: {device}")
+            if ip_address is not None:
+                break
         except socket.timeout:
             break
         except socket.error as e:

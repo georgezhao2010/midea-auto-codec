@@ -2,7 +2,7 @@ import lupa
 import threading
 import json
 from .logger import MideaLogger
-lupa.LuaMemoryError
+
 
 class LuaRuntime:
     def __init__(self, file):
@@ -13,14 +13,15 @@ class LuaRuntime:
         self._json_to_data = self._runtimes.eval("function(param) return jsonToData(param) end")
         self._data_to_json = self._runtimes.eval("function(param) return dataToJson(param) end")
 
-    def json_to_data(self, json):
+    def json_to_data(self, json_value):
         with self._lock:
-            result = self._json_to_data(json)
+            result = self._json_to_data(json_value)
+
         return result
 
-    def data_to_json(self, data):
+    def data_to_json(self, data_value):
         with self._lock:
-            result = self._data_to_json(data)
+            result = self._data_to_json(data_value)
         return result
 
 
