@@ -59,8 +59,7 @@ class MideaCloud:
         self._login_id = None
 
     def _make_general_data(self):
-        return {
-        }
+        return {}
 
     async def _api_request(self, endpoint: str, data: dict, header=None) -> dict | None:
         header = header or {}
@@ -147,7 +146,7 @@ class MideaCloud:
 
     async def download_lua(
             self, path: str,
-            device_type: str,
+            device_type: int,
             sn: str,
             model_number: str | None,
             manufacturer_code: str = "0000",
