@@ -1,4 +1,4 @@
-# Midea Meiju Codec
+# Midea Auto Codec
  
  [![Stable](https://img.shields.io/github/v/release/georgezhao2010/midea-meiju-codec)](https://github.com/georgezhao2010/midea-meiju-codec/releases/latest)
 

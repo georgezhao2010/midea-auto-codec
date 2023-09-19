@@ -17,7 +17,7 @@
                     "account": "用户名",
                     "password": "密码"
                 },
-                "description": "登录并保存你的美居账号及密码",
+                "description": "登录并保存你的美的用户名及密码",
                 "title": "登录"
             },
             "home": {

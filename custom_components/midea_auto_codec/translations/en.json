@@ -17,7 +17,7 @@
                     "account": "Account",
                     "password": "Password"
                 },
-                "description": "Login and save storage your account",
+                "description": "Login and save storage your Midea account",
                 "title": "Login"
             },
             "home": {
